@@ -10,6 +10,18 @@ Desktop AI overlay assistant (Electron) for context-aware Q&A, voice input, and 
 - Configurable global shortcuts.
 - Multiple LLM/STT backends (OpenAI, Gemini, local options where configured).
 
+## Recent Fixes (This Version)
+
+- OpenAI requests migrated to Responses API flow (including streaming path).
+- Added/updated GPT family support: `gpt-5.2`, `gpt-5`, `gpt-5-mini`.
+- Updated STT options include `gpt-4o-transcribe` and `gpt-4o-mini-transcribe`.
+- Added reasoning effort setting (`low` / `medium` / `high` / `xhigh`) and wired it into LLM requests.
+- Improved shortcut system stability:
+  - show/hide default is `Ctrl+Alt+H` (Windows)
+  - alias `Ctrl+\` supported for show/hide
+  - fixed invalid accelerator parsing for `Backslash` in shortcut editor
+  - fixed re-register flow so show/hide alias is not lost after window/state changes
+
 ## Requirements
 
 - Node.js `20.x`
@@ -69,6 +81,7 @@ If app does not open:
 Shortcuts can be changed in Settings -> Edit Shortcuts.
 
 - Show/Hide: default `Ctrl+Alt+H`
+- Show/Hide alias: `Ctrl+\`
 - Ask: default `Ctrl+Alt+A`
 - Listen Start/Stop: see Settings
 - Scroll response up/down: see Settings

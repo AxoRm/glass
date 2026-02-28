@@ -157,7 +157,10 @@ export class ShortcutSettingsView extends LitElement {
         if(isModifier) return null;
     
         const map={ArrowUp:'Up',ArrowDown:'Down',ArrowLeft:'Left',ArrowRight:'Right',' ':'Space'};
-        parts.push(e.key.length===1? e.key.toUpperCase() : (map[e.key]||e.key));
+        const codeMap={Backslash:'\\',BracketLeft:'[',BracketRight:']'};
+        let keyPart = codeMap[e.code] || map[e.key] || e.key;
+        if (keyPart.length === 1 && keyPart !== '\\') keyPart = keyPart.toUpperCase();
+        parts.push(keyPart);
         const accel=parts.join('+');
     
         /* ---- validation ---- */

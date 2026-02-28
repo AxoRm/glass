@@ -279,18 +279,21 @@ class ShortcutsService {
 
         const registerToggleVisibilityWithAliases = () => {
             const isMac = process.platform === 'darwin';
-            const explicitAlias = isMac ? 'Cmd+\\' : 'Ctrl+\\';
-            const aliases = [keybinds.toggleVisibility];
-            if (explicitAlias !== keybinds.toggleVisibility) {
-                aliases.push(explicitAlias);
-            }
-
-            for (const accelerator of aliases) {
-                try {
-                    globalShortcut.register(accelerator, () => this.toggleAllWindowsVisibility());
-                } catch (error) {
-                    console.error(`[Shortcuts] Failed to register toggleVisibility alias (${accelerator}):`, error.message);
-                }
+            const aliases = [
+                keybinds.toggleVisibility,
+                isMac ? 'Cmd+\\' : 'Ctrl+\\',
+                'CommandOrControl+\\',
+            ];
+            const registered = new Set();
+            for (const alias of aliases) {
+                const accelerator = this._normalizeAccelerator(alias);
+                if (!accelerator || registered.has(accelerator)) continue;
+                registered.add(accelerator);
+                this._registerShortcutSafe(
+                    accelerator,
+                    () => this.toggleAllWindowsVisibility(),
+                    `toggleVisibility alias (${accelerator})`
+                );
             }
         };
 
@@ -331,8 +334,11 @@ class ShortcutsService {
             return;
         }
 
+        registerToggleVisibilityWithAliases();
+
         for (const action in keybinds) {
-            const accelerator = keybinds[action];
+            if (action === 'toggleVisibility') continue;
+            const accelerator = this._normalizeAccelerator(keybinds[action]);
             if (!accelerator) continue;
 
             let callback;
@@ -392,14 +398,34 @@ class ShortcutsService {
             }
             
             if (callback) {
-                try {
-                    globalShortcut.register(accelerator, callback);
-                } catch(e) {
-                    console.error(`[Shortcuts] Failed to register shortcut for "${action}" (${accelerator}):`, e.message);
-                }
+                this._registerShortcutSafe(accelerator, callback, `"${action}" (${accelerator})`);
             }
         }
         console.log('[Shortcuts] All shortcuts have been registered.');
+    }
+
+    _normalizeAccelerator(accelerator) {
+        if (!accelerator || typeof accelerator !== 'string') return '';
+        let normalized = accelerator.trim().replace(/\s+/g, '');
+        if (!normalized) return '';
+
+        normalized = normalized.replace(/CommandOrControl/gi, process.platform === 'darwin' ? 'Cmd' : 'Ctrl');
+        normalized = normalized.replace(/Backslash/gi, '\\');
+
+        return normalized;
+    }
+
+    _registerShortcutSafe(accelerator, callback, label) {
+        try {
+            const ok = globalShortcut.register(accelerator, callback);
+            if (!ok) {
+                console.error(`[Shortcuts] Failed to register shortcut for ${label}: register() returned false`);
+            }
+            return ok;
+        } catch (error) {
+            console.error(`[Shortcuts] Failed to register shortcut for ${label}:`, error.message);
+            return false;
+        }
     }
 
     unregisterAll() {
