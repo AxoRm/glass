@@ -113,3 +113,29 @@ data/*.db-wal
 out/
 dist/
 build/ 
+
+# Local secrets and personal runtime data
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# Local packaging / transfer artifacts
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+
+# Local Windows launchers and temp artifacts
+start-glass.log
+run.log
+run2.log
+run-new.log
+build-win.log
+package-win.log
+-S
