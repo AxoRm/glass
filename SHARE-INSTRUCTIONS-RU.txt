@@ -1,16 +1,21 @@
-Glass (Windows) - инструкция для запуска
+Glass: быстрый гайд для друга (Windows)
 
-1) Установить:
+1) Установить зависимости:
 - Node.js 20.x
-- Python 3
-- Build Tools for Visual Studio (C++ workload)
+- Python 3.x
+- Visual Studio Build Tools
 
-2) Открыть папку проекта в PowerShell/CMD и выполнить:
-npm run setup
+2) В папке проекта:
+- npm run setup
 
-3) Запуск программы:
+3) Запуск:
 - обычный: npm start
-- скрытый старт без консоли: двойной клик по Start-Glass-Hidden.vbs
+- скрытый: двойной клик Start-Glass-Hidden.vbs
 
-Полезно:
-- Ctrl+M переключает click-through режим (сквозь окно/обратно).
+4) Если не стартует:
+- открыть start-glass.log
+- проверить node -v (должно быть 20.x)
+
+Подробно:
+- README.md
+- docs/HIDDEN-LAUNCH-RU.md
