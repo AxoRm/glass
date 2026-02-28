@@ -10,6 +10,7 @@ const displayNameMap = {
     nextStep: 'Ask Anything',
     toggleListen: 'Listen Start/Stop',
     toggleSettings: 'Toggle Settings',
+    closeExtraWindows: 'Close Extra Windows',
     moveUp: 'Move Up Window',
     moveDown: 'Move Down Window',
     scrollUp: 'Scroll Up Response',

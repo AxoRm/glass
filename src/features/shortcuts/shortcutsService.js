@@ -69,6 +69,7 @@ class ShortcutsService {
             nextStep: isMac ? 'Cmd+Alt+A' : 'Ctrl+Alt+A',
             toggleListen: isMac ? 'Cmd+Alt+L' : 'Ctrl+Alt+L',
             toggleSettings: isMac ? 'Cmd+Alt+S' : 'Ctrl+Alt+S',
+            closeExtraWindows: isMac ? 'Cmd+Alt+M' : 'Ctrl+Alt+M',
             manualScreenshot: isMac ? 'Cmd+Alt+X' : 'Ctrl+Alt+X',
             previousResponse: isMac ? 'Cmd+Alt+[' : 'Ctrl+Alt+[',
             nextResponse: isMac ? 'Cmd+Alt+]' : 'Ctrl+Alt+]',
@@ -241,6 +242,20 @@ class ShortcutsService {
         internalBridge.emit('window:requestVisibility', { name: 'settings', visible: shouldShow });
     }
 
+    _closeExtraWindowsToMainMenu() {
+        const header = this.windowPool.get('header');
+        if (header && !header.isDestroyed() && !header.isVisible()) {
+            header.show();
+        }
+
+        const extras = ['listen', 'ask', 'settings', 'shortcut-settings'];
+        extras.forEach((name) => {
+            internalBridge.emit('window:requestVisibility', { name, visible: false });
+        });
+
+        this.allWindowVisibility = true;
+    }
+
     async _toggleListenSession() {
         const listenWindow = this.windowPool.get('listen');
         const isActive = listenService.isSessionActive();
@@ -381,6 +396,9 @@ class ShortcutsService {
                     break;
                 case 'toggleSettings':
                     callback = () => this._toggleSettingsWindow();
+                    break;
+                case 'closeExtraWindows':
+                    callback = () => this._closeExtraWindowsToMainMenu();
                     break;
                 case 'manualScreenshot':
                     callback = () => {

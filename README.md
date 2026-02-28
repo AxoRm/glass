@@ -19,6 +19,7 @@ Desktop AI overlay assistant (Electron) for context-aware Q&A, voice input, and 
 - Improved shortcut system stability:
   - show/hide default is `Ctrl+Alt+H` (Windows)
   - alias `Ctrl+\` supported for show/hide
+  - added `Close Extra Windows` shortcut (keeps only main menu/header visible)
   - fixed invalid accelerator parsing for `Backslash` in shortcut editor
   - fixed re-register flow so show/hide alias is not lost after window/state changes
 
@@ -84,6 +85,7 @@ Shortcuts can be changed in Settings -> Edit Shortcuts.
 - Show/Hide alias: `Ctrl+\`
 - Ask: default `Ctrl+Alt+A`
 - Listen Start/Stop: see Settings
+- Close Extra Windows (leave only main menu): default `Ctrl+Alt+M`
 - Scroll response up/down: see Settings
 
 Alias support for alternative keys depends on OS keyboard layout and global shortcut capture limits.

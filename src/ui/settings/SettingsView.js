@@ -1130,6 +1130,7 @@ export class SettingsView extends LitElement {
             { name: 'Listen', accelerator: this.shortcuts.toggleListen },
             { name: 'Ask Anything', accelerator: this.shortcuts.nextStep },
             { name: 'Settings', accelerator: this.shortcuts.toggleSettings },
+            { name: 'Close Extra Windows', accelerator: this.shortcuts.closeExtraWindows },
             { name: 'Scroll Up', accelerator: this.shortcuts.scrollUp },
             { name: 'Scroll Down', accelerator: this.shortcuts.scrollDown },
         ];
