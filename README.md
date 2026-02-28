@@ -30,6 +30,115 @@ Desktop AI overlay assistant (Electron) for context-aware Q&A, voice input, and 
 - Python `3.x`
 - Windows: Visual Studio Build Tools (for native deps)
 
+## Windows: Full Clone/Install/Run Guide
+
+Repository:
+
+`https://github.com/AxoRm/glass`
+
+### 1) Install prerequisites (Windows)
+
+Install:
+
+- Git for Windows: https://git-scm.com/download/win
+- Node.js 20.x LTS: https://nodejs.org/en/download
+- Python 3.x: https://www.python.org/downloads/windows/
+- Visual Studio Build Tools: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+
+For Build Tools installer, enable:
+
+- `Desktop development with C++`
+- MSVC v143 build tools
+- Windows 10/11 SDK
+
+Verify in terminal:
+
+```bash
+git --version
+node -v
+npm -v
+python --version
+```
+
+### 2) Clone project
+
+```bash
+git clone https://github.com/AxoRm/glass.git
+cd glass
+```
+
+### 3) Install dependencies and first run
+
+```bash
+npm run setup
+```
+
+This installs root/web dependencies, builds web/renderer, and starts app once.
+
+Next normal runs:
+
+```bash
+npm start
+```
+
+### 4) Configure API key in app
+
+Open Settings in the app and set your provider API key (OpenAI/Gemini/etc.), then choose LLM/STT models.
+
+### 5) Build Windows app (recommended for best hidden launch)
+
+```bash
+npm run build:win
+```
+
+Expected outputs:
+
+- `dist\\Glass Portable.exe`
+- or `dist\\win-unpacked\\Glass.exe`
+
+### 6) Hidden launcher (silent startup without console)
+
+Use `Start-Glass-Hidden.vbs` (double click).
+
+Launcher order:
+
+1. Runs `dist\\Glass Portable.exe` if present
+2. Else runs `dist\\win-unpacked\\Glass.exe`
+3. Else falls back to background source run (`npm start`) and writes log
+
+Logs:
+
+- `start-glass.log` for hidden launcher
+- `run.log` / `run2.log` / `run-new.log` for runtime (if present)
+
+### 7) Add hidden launch at Windows startup (optional)
+
+1. `Win + R`
+2. Run `shell:startup`
+3. Put shortcut to `Start-Glass-Hidden.vbs` there
+
+### 8) Updating to latest version
+
+Inside project folder:
+
+```bash
+git pull
+npm install
+npm run build:renderer
+```
+
+Then restart app. If dependencies changed significantly, run `npm run setup` once.
+
+### 9) Troubleshooting on Windows
+
+If app does not start:
+
+1. Run foreground mode once: `npm start`
+2. Check `start-glass.log`
+3. Ensure Node is `20.x`
+4. Reinstall deps: `npm install`
+5. Rebuild renderer: `npm run build:renderer`
+
 ## Quick Start
 
 ```bash
