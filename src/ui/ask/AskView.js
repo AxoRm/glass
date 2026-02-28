@@ -5,6 +5,7 @@ export class AskView extends LitElement {
     static properties = {
         currentResponse: { type: String },
         currentQuestion: { type: String },
+        voiceDraft: { type: String },
         isLoading: { type: Boolean },
         copyState: { type: String },
         isHovering: { type: Boolean },
@@ -510,6 +511,22 @@ export class AskView extends LitElement {
             border-top: none;
         }
 
+        .voice-draft {
+            max-width: 220px;
+            min-width: 90px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 11px;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-shrink: 0;
+        }
+
         #textInput {
             flex: 1;
             padding: 10px 14px;
@@ -715,6 +732,7 @@ export class AskView extends LitElement {
         super();
         this.currentResponse = '';
         this.currentQuestion = '';
+        this.voiceDraft = '';
         this.isLoading = false;
         this.copyState = 'idle';
         this.showTextInput = true;
@@ -789,6 +807,7 @@ export class AskView extends LitElement {
             window.api.askView.onAskStateUpdate((event, newState) => {
                 this.currentResponse = newState.currentResponse;
                 this.currentQuestion = newState.currentQuestion;
+                this.voiceDraft = newState.voiceDraft || '';
                 this.isLoading       = newState.isLoading;
                 this.isStreaming     = newState.isStreaming;
               
@@ -1382,6 +1401,7 @@ export class AskView extends LitElement {
 
                 <!-- Text Input Container -->
                 <div class="text-input-container ${!hasResponse ? 'no-response' : ''} ${!this.showTextInput ? 'hidden' : ''}">
+                    ${this.voiceDraft ? html`<div class="voice-draft" title=${this.voiceDraft}>Voice: ${this.voiceDraft}</div>` : ''}
                     <input
                         type="text"
                         id="textInput"

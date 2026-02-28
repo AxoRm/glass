@@ -2,6 +2,7 @@ const { globalShortcut, screen } = require('electron');
 const shortcutsRepository = require('./repositories');
 const internalBridge = require('../../bridge/internalBridge');
 const askService = require('../ask/askService');
+const listenService = require('../listen/listenService');
 
 
 class ShortcutsService {
@@ -59,6 +60,26 @@ class ShortcutsService {
     getDefaultKeybinds() {
         const isMac = process.platform === 'darwin';
         return {
+            moveUp: isMac ? 'Cmd+Alt+Up' : 'Ctrl+Alt+Up',
+            moveDown: isMac ? 'Cmd+Alt+Down' : 'Ctrl+Alt+Down',
+            moveLeft: isMac ? 'Cmd+Alt+Left' : 'Ctrl+Alt+Left',
+            moveRight: isMac ? 'Cmd+Alt+Right' : 'Ctrl+Alt+Right',
+            toggleVisibility: isMac ? 'Cmd+Alt+H' : 'Ctrl+Alt+H',
+            toggleClickThrough: isMac ? 'Cmd+Alt+C' : 'Ctrl+Alt+C',
+            nextStep: isMac ? 'Cmd+Alt+A' : 'Ctrl+Alt+A',
+            toggleListen: isMac ? 'Cmd+Alt+L' : 'Ctrl+Alt+L',
+            toggleSettings: isMac ? 'Cmd+Alt+S' : 'Ctrl+Alt+S',
+            manualScreenshot: isMac ? 'Cmd+Alt+X' : 'Ctrl+Alt+X',
+            previousResponse: isMac ? 'Cmd+Alt+[' : 'Ctrl+Alt+[',
+            nextResponse: isMac ? 'Cmd+Alt+]' : 'Ctrl+Alt+]',
+            scrollUp: isMac ? 'Cmd+Alt+K' : 'Ctrl+Alt+K',
+            scrollDown: isMac ? 'Cmd+Alt+J' : 'Ctrl+Alt+J',
+        };
+    }
+
+    getLegacyDefaultKeybinds() {
+        const isMac = process.platform === 'darwin';
+        return {
             moveUp: isMac ? 'Cmd+Up' : 'Ctrl+Up',
             moveDown: isMac ? 'Cmd+Down' : 'Ctrl+Down',
             moveLeft: isMac ? 'Cmd+Left' : 'Ctrl+Left',
@@ -90,9 +111,25 @@ class ShortcutsService {
         });
 
         const defaults = this.getDefaultKeybinds();
+        const legacyDefaults = this.getLegacyDefaultKeybinds();
         let needsUpdate = false;
         for (const action in defaults) {
             if (!keybinds[action]) {
+                keybinds[action] = defaults[action];
+                needsUpdate = true;
+                continue;
+            }
+            if (keybinds[action] === legacyDefaults[action]) {
+                keybinds[action] = defaults[action];
+                needsUpdate = true;
+            }
+            if (
+                action === 'toggleVisibility' &&
+                (
+                    keybinds[action] === 'Ctrl+Alt+Shift+H' ||
+                    keybinds[action] === 'Cmd+Alt+Shift+H'
+                )
+            ) {
                 keybinds[action] = defaults[action];
                 needsUpdate = true;
             }
@@ -135,6 +172,84 @@ class ShortcutsService {
         this.allWindowVisibility = !this.allWindowVisibility;
     }
 
+    applyClickThroughStateToWindow(win) {
+        if (!win || win.isDestroyed()) return;
+        if (this.mouseEventsIgnored) {
+            // Keep window fully transparent for mouse so OS cursor comes from background app.
+            win.setIgnoreMouseEvents(true);
+            return;
+        }
+        win.setIgnoreMouseEvents(false);
+    }
+
+    applyClickThroughStateToAllWindows() {
+        if (!this.windowPool) return;
+        this.windowPool.forEach((win) => this.applyClickThroughStateToWindow(win));
+    }
+
+    toggleClickThrough(sendToRenderer) {
+        this.mouseEventsIgnored = !this.mouseEventsIgnored;
+        this.applyClickThroughStateToAllWindows();
+
+        if (typeof sendToRenderer === 'function') {
+            sendToRenderer('click-through-toggled', this.mouseEventsIgnored);
+        }
+    }
+
+    _scrollWindow(win, direction) {
+        if (!win || win.isDestroyed() || !win.isVisible()) return false;
+        const delta = direction === 'up' ? -120 : 120;
+        const script = `
+            (() => {
+                const delta = ${delta};
+                const canScroll = (el) => {
+                    if (!el || !(el instanceof Element)) return false;
+                    const style = window.getComputedStyle(el);
+                    const overflow = style.overflowY || '';
+                    return /(auto|scroll)/.test(overflow) && el.scrollHeight > el.clientHeight + 2;
+                };
+                const active = document.activeElement;
+                const nodes = [active, ...document.querySelectorAll('*')].filter(Boolean);
+                const target = nodes.find(canScroll) || document.scrollingElement || document.documentElement || document.body;
+                if (!target) return false;
+                target.scrollTop = (target.scrollTop || 0) + delta;
+                return true;
+            })();
+        `;
+
+        win.webContents.executeJavaScript(script, true).catch(() => {});
+        return true;
+    }
+
+    _scrollVisibleWindows(direction) {
+        const preferredOrder = ['ask', 'settings', 'listen', 'shortcut-settings'];
+        for (const name of preferredOrder) {
+            const win = this.windowPool.get(name);
+            if (this._scrollWindow(win, direction)) {
+                if (name === 'ask') {
+                    const channel = direction === 'up' ? 'scroll-response-up' : 'scroll-response-down';
+                    win.webContents.send(channel);
+                }
+                return;
+            }
+        }
+    }
+
+    _toggleSettingsWindow() {
+        const settingsWindow = this.windowPool.get('settings');
+        const shouldShow = !(settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isVisible());
+        internalBridge.emit('window:requestVisibility', { name: 'settings', visible: shouldShow });
+    }
+
+    async _toggleListenSession() {
+        const listenWindow = this.windowPool.get('listen');
+        const isActive = listenService.isSessionActive();
+        const isListenVisible = Boolean(listenWindow && !listenWindow.isDestroyed() && listenWindow.isVisible());
+
+        const listenButtonText = isActive ? 'Stop' : (isListenVisible ? 'Done' : 'Listen');
+        await listenService.handleListenRequest(listenButtonText);
+    }
+
     async registerShortcuts(registerOnlyToggleVisibility = false) {
         if (!this.windowPool) {
             console.error('[Shortcuts] Service not initialized. Cannot register shortcuts.');
@@ -159,11 +274,28 @@ class ShortcutsService {
         };
         
         sendToRenderer('shortcuts-updated', keybinds);
+        this.applyClickThroughStateToAllWindows();
+        sendToRenderer('click-through-toggled', this.mouseEventsIgnored);
+
+        const registerToggleVisibilityWithAliases = () => {
+            const isMac = process.platform === 'darwin';
+            const explicitAlias = isMac ? 'Cmd+\\' : 'Ctrl+\\';
+            const aliases = [keybinds.toggleVisibility];
+            if (explicitAlias !== keybinds.toggleVisibility) {
+                aliases.push(explicitAlias);
+            }
+
+            for (const accelerator of aliases) {
+                try {
+                    globalShortcut.register(accelerator, () => this.toggleAllWindowsVisibility());
+                } catch (error) {
+                    console.error(`[Shortcuts] Failed to register toggleVisibility alias (${accelerator}):`, error.message);
+                }
+            }
+        };
 
         if (registerOnlyToggleVisibility) {
-            if (keybinds.toggleVisibility) {
-                globalShortcut.register(keybinds.toggleVisibility, () => this.toggleAllWindowsVisibility());
-            }
+            registerToggleVisibilityWithAliases();
             console.log('[Shortcuts] registerOnlyToggleVisibility, only toggleVisibility shortcut is registered.');
             return;
         }
@@ -194,9 +326,7 @@ class ShortcutsService {
 
         // --- User-configurable shortcuts ---
         if (header?.currentHeaderState === 'apikey') {
-            if (keybinds.toggleVisibility) {
-                globalShortcut.register(keybinds.toggleVisibility, () => this.toggleAllWindowsVisibility());
-            }
+            registerToggleVisibilityWithAliases();
             console.log('[Shortcuts] ApiKeyHeader is active, only toggleVisibility shortcut is registered.');
             return;
         }
@@ -214,20 +344,10 @@ class ShortcutsService {
                     callback = () => askService.toggleAskButton(true);
                     break;
                 case 'scrollUp':
-                    callback = () => {
-                        const askWindow = this.windowPool.get('ask');
-                        if (askWindow && !askWindow.isDestroyed() && askWindow.isVisible()) {
-                            askWindow.webContents.send('scroll-response-up');
-                        }
-                    };
+                    callback = () => this._scrollVisibleWindows('up');
                     break;
                 case 'scrollDown':
-                    callback = () => {
-                        const askWindow = this.windowPool.get('ask');
-                        if (askWindow && !askWindow.isDestroyed() && askWindow.isVisible()) {
-                            askWindow.webContents.send('scroll-response-down');
-                        }
-                    };
+                    callback = () => this._scrollVisibleWindows('down');
                     break;
                 case 'moveUp':
                     callback = () => { if (header && header.isVisible()) internalBridge.emit('window:moveStep', { direction: 'up' }); };
@@ -242,14 +362,20 @@ class ShortcutsService {
                     callback = () => { if (header && header.isVisible()) internalBridge.emit('window:moveStep', { direction: 'right' }); };
                     break;
                 case 'toggleClickThrough':
-                     callback = () => {
-                        this.mouseEventsIgnored = !this.mouseEventsIgnored;
-                        if(mainWindow && !mainWindow.isDestroyed()){
-                            mainWindow.setIgnoreMouseEvents(this.mouseEventsIgnored, { forward: true });
-                            mainWindow.webContents.send('click-through-toggled', this.mouseEventsIgnored);
+                    callback = () => this.toggleClickThrough(sendToRenderer);
+                    break;
+                case 'toggleListen':
+                    callback = async () => {
+                        try {
+                            await this._toggleListenSession();
+                        } catch (error) {
+                            console.error('[Shortcuts] toggleListen failed:', error.message);
                         }
-                     };
-                     break;
+                    };
+                    break;
+                case 'toggleSettings':
+                    callback = () => this._toggleSettingsWindow();
+                    break;
                 case 'manualScreenshot':
                     callback = () => {
                         if(mainWindow && !mainWindow.isDestroyed()) {

@@ -4,6 +4,7 @@ const { createLLM } = require('../../common/ai/factory');
 const sessionRepository = require('../../common/repositories/session');
 const summaryRepository = require('./repositories');
 const modelStateService = require('../../common/services/modelStateService');
+const settingsService = require('../../settings/settingsService');
 
 class SummaryService {
     constructor() {
@@ -90,7 +91,9 @@ Please build upon this context while analyzing the new conversation segments.
 `;
         }
 
-        const basePrompt = getSystemPrompt('pickle_glass_analysis', '', false);
+        const selectedPresetPrompt = await settingsService.getSelectedPresetPrompt();
+        const reasoningEffort = await settingsService.getReasoningEffort();
+        const basePrompt = getSystemPrompt('pickle_glass_analysis', selectedPresetPrompt || '', false);
         const systemPrompt = basePrompt.replace('{{CONVERSATION_HISTORY}}', recentConversation);
 
         try {
@@ -144,6 +147,7 @@ Keep all points concise and build upon previous analysis if provided.`,
                 maxTokens: 1024,
                 usePortkey: modelInfo.provider === 'openai-glass',
                 portkeyVirtualKey: modelInfo.provider === 'openai-glass' ? modelInfo.apiKey : undefined,
+                reasoningEffort,
             });
 
             const completion = await llm.chat(messages);

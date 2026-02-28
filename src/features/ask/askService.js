@@ -22,6 +22,7 @@ const util = require('util');
 const execFile = util.promisify(require('child_process').execFile);
 const { desktopCapturer } = require('electron');
 const modelStateService = require('../common/services/modelStateService');
+const settingsService = require('../settings/settingsService');
 
 // Try to load sharp, but don't fail if it's not available
 let sharp;
@@ -34,6 +35,7 @@ try {
     sharp = null;
 }
 let lastScreenshot = null;
+const VOICE_DRAFT_MAX_AGE_MS = 10 * 60 * 1000;
 
 async function captureScreenshot(options = {}) {
     if (process.platform === 'darwin') {
@@ -133,6 +135,9 @@ class AskService {
             currentQuestion: '',
             currentResponse: '',
             showTextInput: true,
+            voiceDraft: '',
+            voiceSpeaker: '',
+            voiceDraftTimestamp: 0,
         };
         console.log('[AskService] Service instance created.');
     }
@@ -144,12 +149,36 @@ class AskService {
         }
     }
 
+    setVoiceDraft(speaker, text) {
+        const draft = typeof text === 'string' ? text.trim() : '';
+        if (!draft) return;
+
+        this.state = {
+            ...this.state,
+            voiceDraft: draft,
+            voiceSpeaker: speaker || 'Me',
+            voiceDraftTimestamp: Date.now(),
+        };
+        this._broadcastState();
+    }
+
+    _resolveEffectivePrompt(userPrompt) {
+        const typedPrompt = typeof userPrompt === 'string' ? userPrompt.trim() : '';
+        if (typedPrompt) return typedPrompt;
+
+        const voiceDraft = this.state.voiceDraft?.trim();
+        const draftAgeMs = Date.now() - (this.state.voiceDraftTimestamp || 0);
+        if (voiceDraft && draftAgeMs <= VOICE_DRAFT_MAX_AGE_MS) {
+            return voiceDraft;
+        }
+
+        return '';
+    }
+
     async toggleAskButton(inputScreenOnly = false) {
         const askWindow = getWindowPool()?.get('ask');
 
-        let shouldSendScreenOnly = false;
-        if (inputScreenOnly && this.state.showTextInput && askWindow && askWindow.isVisible()) {
-            shouldSendScreenOnly = true;
+        if (inputScreenOnly && (!askWindow || !askWindow.isVisible() || this.state.showTextInput)) {
             await this.sendMessage('', []);
             return;
         }
@@ -188,6 +217,9 @@ class AskService {
                 currentQuestion: '',
                 currentResponse: '',
                 showTextInput  : true,
+                voiceDraft: this.state.voiceDraft || '',
+                voiceSpeaker: this.state.voiceSpeaker || '',
+                voiceDraftTimestamp: this.state.voiceDraftTimestamp || 0,
             };
             this._broadcastState();
     
@@ -216,12 +248,15 @@ class AskService {
      * @returns {Promise<{success: boolean, response?: string, error?: string}>}
      */
     async sendMessage(userPrompt, conversationHistoryRaw=[]) {
+        const effectivePrompt = this._resolveEffectivePrompt(userPrompt);
+        const userRequest = effectivePrompt || 'Analyze the current screen and provide the most relevant help right now.';
+
         internalBridge.emit('window:requestVisibility', { name: 'ask', visible: true });
         this.state = {
             ...this.state,
             isLoading: true,
             isStreaming: false,
-            currentQuestion: userPrompt,
+            currentQuestion: effectivePrompt || '[Screen context]',
             currentResponse: '',
             showTextInput: false,
         };
@@ -237,11 +272,13 @@ class AskService {
         let sessionId;
 
         try {
-            console.log(`[AskService] 🤖 Processing message: ${userPrompt.substring(0, 50)}...`);
+            console.log(`[AskService] 🤖 Processing message: ${userRequest.substring(0, 80)}...`);
 
             sessionId = await sessionRepository.getOrCreateActive('ask');
-            await askRepository.addAiMessage({ sessionId, role: 'user', content: userPrompt.trim() });
-            console.log(`[AskService] DB: Saved user prompt to session ${sessionId}`);
+            if (effectivePrompt) {
+                await askRepository.addAiMessage({ sessionId, role: 'user', content: effectivePrompt });
+                console.log(`[AskService] DB: Saved user prompt to session ${sessionId}`);
+            }
             
             const modelInfo = await modelStateService.getCurrentModelInfo('llm');
             if (!modelInfo || !modelInfo.apiKey) {
@@ -253,15 +290,27 @@ class AskService {
             const screenshotBase64 = screenshotResult.success ? screenshotResult.base64 : null;
 
             const conversationHistory = this._formatConversationForPrompt(conversationHistoryRaw);
+            const selectedPresetPrompt = await settingsService.getSelectedPresetPrompt();
+            const reasoningEffort = await settingsService.getReasoningEffort();
+            const appSettings = await settingsService.getSettings();
+            const configuredMaxTokens = Number(appSettings?.maxTokens);
 
-            const systemPrompt = getSystemPrompt('pickle_glass_analysis', conversationHistory, false);
+            const isGpt5Model = typeof modelInfo.model === 'string' && modelInfo.model.toLowerCase().startsWith('gpt-5');
+            const reasoningIsHigh = reasoningEffort === 'high' || reasoningEffort === 'xhigh';
+            const defaultMinTokens = (isGpt5Model && reasoningIsHigh) ? 8192 : 4096;
+            const effectiveMaxTokens = Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
+                ? Math.max(configuredMaxTokens, defaultMinTokens)
+                : defaultMinTokens;
+
+            const basePrompt = getSystemPrompt('pickle_glass_analysis', selectedPresetPrompt || '', false);
+            const systemPrompt = basePrompt.replace('{{CONVERSATION_HISTORY}}', conversationHistory);
 
             const messages = [
                 { role: 'system', content: systemPrompt },
                 {
                     role: 'user',
                     content: [
-                        { type: 'text', text: `User Request: ${userPrompt.trim()}` },
+                        { type: 'text', text: `User Request: ${userRequest}` },
                     ],
                 },
             ];
@@ -277,9 +326,10 @@ class AskService {
                 apiKey: modelInfo.apiKey,
                 model: modelInfo.model,
                 temperature: 0.7,
-                maxTokens: 2048,
+                maxTokens: effectiveMaxTokens,
                 usePortkey: modelInfo.provider === 'openai-glass',
                 portkeyVirtualKey: modelInfo.provider === 'openai-glass' ? modelInfo.apiKey : undefined,
+                reasoningEffort,
             });
 
             try {
@@ -298,7 +348,7 @@ class AskService {
                     reader.cancel(signal.reason).catch(() => { /* 이미 취소된 경우의 오류는 무시 */ });
                 });
 
-                await this._processStream(reader, askWin, sessionId, signal);
+                await this._processStream(reader, askWin, sessionId, signal, modelInfo.model);
                 return { success: true };
 
             } catch (multimodalError) {
@@ -311,7 +361,7 @@ class AskService {
                         { role: 'system', content: systemPrompt },
                         {
                             role: 'user',
-                            content: `User Request: ${userPrompt.trim()}`
+                            content: `User Request: ${userRequest}`
                         }
                     ];
 
@@ -330,7 +380,7 @@ class AskService {
                         fallbackReader.cancel(signal.reason).catch(() => {});
                     });
 
-                    await this._processStream(fallbackReader, askWin, sessionId, signal);
+                    await this._processStream(fallbackReader, askWin, sessionId, signal, modelInfo.model);
                     return { success: true };
                 } else {
                     // 다른 종류의 에러이거나 스크린샷이 없었다면 그대로 throw
@@ -367,9 +417,11 @@ class AskService {
      * @returns {Promise<void>}
      * @private
      */
-    async _processStream(reader, askWin, sessionId, signal) {
+    async _processStream(reader, askWin, sessionId, signal, assistantModel = 'unknown') {
         const decoder = new TextDecoder();
         let fullResponse = '';
+        let sseBuffer = '';
+        let completedResponseText = '';
 
         try {
             this.state.isLoading = false;
@@ -379,25 +431,39 @@ class AskService {
                 const { done, value } = await reader.read();
                 if (done) break;
 
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n').filter(line => line.trim() !== '');
+                const chunk = decoder.decode(value, { stream: true });
+                sseBuffer += chunk;
+                const lines = sseBuffer.split('\n');
+                sseBuffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const data = line.substring(6);
-                        if (data === '[DONE]') {
-                            return; 
-                        }
-                        try {
-                            const json = JSON.parse(data);
-                            const token = json.choices[0]?.delta?.content || '';
-                            if (token) {
-                                fullResponse += token;
-                                this.state.currentResponse = fullResponse;
-                                this._broadcastState();
-                            }
-                        } catch (error) {
-                        }
+                    const trimmedLine = line.trim();
+                    if (!trimmedLine.startsWith('data:')) continue;
+
+                    const data = trimmedLine.slice(5).trim();
+                    if (data === '[DONE]') continue;
+
+                    let json;
+                    try {
+                        json = JSON.parse(data);
+                    } catch {
+                        continue;
+                    }
+
+                    const streamError = this._extractErrorFromStreamEvent(json);
+                    if (streamError) {
+                        throw new Error(streamError);
+                    }
+
+                    const token = this._extractTokenFromStreamEvent(json);
+                    if (token) {
+                        fullResponse += token;
+                        this.state.currentResponse = fullResponse;
+                        this._broadcastState();
+                    }
+
+                    if (!completedResponseText) {
+                        completedResponseText = this._extractCompletedTextFromStreamEvent(json);
                     }
                 }
             }
@@ -411,18 +477,111 @@ class AskService {
                 }
             }
         } finally {
+            if (!fullResponse && completedResponseText) {
+                fullResponse = completedResponseText;
+            }
             this.state.isStreaming = false;
             this.state.currentResponse = fullResponse;
             this._broadcastState();
             if (fullResponse) {
                  try {
-                    await askRepository.addAiMessage({ sessionId, role: 'assistant', content: fullResponse });
+                    await askRepository.addAiMessage({ sessionId, role: 'assistant', content: fullResponse, model: assistantModel });
                     console.log(`[AskService] DB: Saved partial or full assistant response to session ${sessionId} after stream ended.`);
                 } catch(dbError) {
                     console.error("[AskService] DB: Failed to save assistant response after stream ended:", dbError);
                 }
             }
         }
+    }
+
+    _extractTokenFromStreamEvent(eventPayload) {
+        if (!eventPayload || typeof eventPayload !== 'object') return '';
+
+        if (typeof eventPayload.delta === 'string') {
+            return eventPayload.delta;
+        }
+
+        if (eventPayload.type === 'response.output_text.delta' && typeof eventPayload.delta === 'string') {
+            return eventPayload.delta;
+        }
+
+        if (eventPayload.type === 'response.content_part.added') {
+            const part = eventPayload?.part;
+            if (typeof part?.text === 'string') return part.text;
+        }
+
+        if (eventPayload.type === 'response.content_part.delta') {
+            const delta = eventPayload?.delta;
+            if (typeof delta === 'string') return delta;
+            if (typeof delta?.text === 'string') return delta.text;
+        }
+
+        const content = eventPayload?.choices?.[0]?.delta?.content;
+        if (typeof content === 'string') {
+            return content;
+        }
+        if (Array.isArray(content)) {
+            return content
+                .map((part) => {
+                    if (typeof part === 'string') return part;
+                    if (!part || typeof part !== 'object') return '';
+                    if (typeof part.text === 'string') return part.text;
+                    if (typeof part.delta === 'string') return part.delta;
+                    if (part.text && typeof part.text.value === 'string') return part.text.value;
+                    return '';
+                })
+                .join('');
+        }
+        return '';
+    }
+
+    _extractCompletedTextFromStreamEvent(eventPayload) {
+        if (!eventPayload || typeof eventPayload !== 'object') return '';
+
+        const response = eventPayload.response;
+        if (!response || typeof response !== 'object') return '';
+
+        if (typeof response.output_text === 'string') {
+            return response.output_text.trim();
+        }
+
+        if (Array.isArray(response.output_text)) {
+            return response.output_text
+                .map((part) => {
+                    if (typeof part === 'string') return part;
+                    if (!part || typeof part !== 'object') return '';
+                    if (typeof part.text === 'string') return part.text;
+                    return '';
+                })
+                .join('')
+                .trim();
+        }
+
+        const output = Array.isArray(response.output) ? response.output : [];
+        return output
+            .flatMap((item) => Array.isArray(item?.content) ? item.content : [])
+            .map((part) => {
+                if (!part || typeof part !== 'object') return '';
+                if (typeof part.text === 'string') return part.text;
+                if (part.text && typeof part.text.value === 'string') return part.text.value;
+                return '';
+            })
+            .join('')
+            .trim();
+    }
+
+    _extractErrorFromStreamEvent(eventPayload) {
+        if (!eventPayload || typeof eventPayload !== 'object') return '';
+
+        if (eventPayload.type === 'error') {
+            return eventPayload?.error?.message || 'Unknown streaming error';
+        }
+
+        if (eventPayload.type === 'response.failed') {
+            return eventPayload?.response?.error?.message || 'Response failed';
+        }
+
+        return '';
     }
 
     /**

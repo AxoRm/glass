@@ -18,8 +18,12 @@ module.exports = {
   initialize() {
     // Settings Service
     ipcMain.handle('settings:getPresets', async () => await settingsService.getPresets());
+    ipcMain.handle('settings:get-selected-preset-id', async () => await settingsService.getSelectedPresetId());
+    ipcMain.handle('settings:set-selected-preset-id', async (event, presetId) => await settingsService.setSelectedPresetId(presetId));
     ipcMain.handle('settings:get-auto-update', async () => await settingsService.getAutoUpdateSetting());
     ipcMain.handle('settings:set-auto-update', async (event, isEnabled) => await settingsService.setAutoUpdateSetting(isEnabled));  
+    ipcMain.handle('settings:get-reasoning-effort', async () => await settingsService.getReasoningEffort());
+    ipcMain.handle('settings:set-reasoning-effort', async (event, value) => await settingsService.setReasoningEffort(value));
     ipcMain.handle('settings:get-model-settings', async () => await settingsService.getModelSettings());
     ipcMain.handle('settings:clear-api-key', async (e, { provider }) => await settingsService.clearApiKey(provider));
     ipcMain.handle('settings:set-selected-model', async (e, { type, modelId }) => await settingsService.setSelectedModel(type, modelId));    

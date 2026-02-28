@@ -11,7 +11,7 @@ export class SettingsView extends LitElement {
 
         :host {
             display: block;
-            width: 240px;
+            width: 380px;
             height: 100%;
             color: white;
         }
@@ -127,9 +127,10 @@ export class SettingsView extends LitElement {
         }
 
         .shortcut-item {
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
             align-items: center;
+            gap: 8px;
             padding: 4px 0;
             color: white;
             font-size: 11px;
@@ -137,12 +138,18 @@ export class SettingsView extends LitElement {
 
         .shortcut-name {
             font-weight: 300;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .shortcut-keys {
             display: flex;
             align-items: center;
             gap: 3px;
+            justify-content: flex-end;
+            flex-wrap: nowrap;
         }
 
         .cmd-key, .shortcut-key {
@@ -383,6 +390,20 @@ export class SettingsView extends LitElement {
             flex-direction: column;
             gap: 4px;
         }
+        .settings-select {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 4px;
+            padding: 5px 8px;
+            font-size: 11px;
+            box-sizing: border-box;
+        }
+        .settings-select option {
+            background: #1d1d1d;
+            color: white;
+        }
         label {
             font-size: 11px;
             font-weight: 500;
@@ -499,6 +520,7 @@ export class SettingsView extends LitElement {
         showPresets: { type: Boolean, state: true },
         autoUpdateEnabled: { type: Boolean, state: true },
         autoUpdateLoading: { type: Boolean, state: true },
+        reasoningEffort: { type: String, state: true },
         // Ollama related properties
         ollamaStatus: { type: Object, state: true },
         ollamaModels: { type: Array, state: true },
@@ -537,6 +559,7 @@ export class SettingsView extends LitElement {
         this.handleUsePicklesKey = this.handleUsePicklesKey.bind(this)
         this.autoUpdateEnabled = true;
         this.autoUpdateLoading = true;
+        this.reasoningEffort = 'medium';
         this.loadInitialData();
         //////// after_modelStateService ////////
     }
@@ -572,6 +595,25 @@ export class SettingsView extends LitElement {
             console.error('Error toggling auto-update:', e);
         }
         this.autoUpdateLoading = false;
+        this.requestUpdate();
+    }
+
+    async handleReasoningEffortChange(event) {
+        const nextValue = event?.target?.value || 'medium';
+        this.reasoningEffort = nextValue;
+        this.requestUpdate();
+
+        try {
+            const result = await window.api.settingsView.setReasoningEffort(nextValue);
+            if (!result?.success) {
+                const fallback = await window.api.settingsView.getReasoningEffort();
+                this.reasoningEffort = fallback || 'medium';
+            }
+        } catch (error) {
+            console.error('[SettingsView] Failed to update reasoning effort:', error);
+            const fallback = await window.api.settingsView.getReasoningEffort();
+            this.reasoningEffort = fallback || 'medium';
+        }
         this.requestUpdate();
     }
 
@@ -613,12 +655,14 @@ export class SettingsView extends LitElement {
         this.isLoading = true;
         try {
             // Load essential data first
-            const [userState, modelSettings, presets, contentProtection, shortcuts] = await Promise.all([
+            const [userState, modelSettings, presets, contentProtection, shortcuts, selectedPresetId, reasoningEffort] = await Promise.all([
                 window.api.settingsView.getCurrentUser(),
                 window.api.settingsView.getModelSettings(), // Facade call
                 window.api.settingsView.getPresets(),
                 window.api.settingsView.getContentProtectionStatus(),
-                window.api.settingsView.getCurrentShortcuts()
+                window.api.settingsView.getCurrentShortcuts(),
+                window.api.settingsView.getSelectedPresetId(),
+                window.api.settingsView.getReasoningEffort()
             ]);
             
             if (userState && userState.isLoggedIn) this.firebaseUser = userState;
@@ -636,9 +680,21 @@ export class SettingsView extends LitElement {
             this.presets = presets || [];
             this.isContentProtectionOn = contentProtection;
             this.shortcuts = shortcuts || {};
-            if (this.presets.length > 0) {
-                const firstUserPreset = this.presets.find(p => p.is_default === 0);
-                if (firstUserPreset) this.selectedPreset = firstUserPreset;
+            this.reasoningEffort = reasoningEffort || 'medium';
+            const userPresets = this.presets.filter(p => p.is_default === 0);
+            if (userPresets.length > 0) {
+                const selected = selectedPresetId
+                    ? userPresets.find(p => p.id === selectedPresetId)
+                    : null;
+                this.selectedPreset = selected || userPresets[0];
+                if (this.selectedPreset?.id !== selectedPresetId) {
+                    await window.api.settingsView.setSelectedPresetId(this.selectedPreset.id);
+                }
+            } else {
+                this.selectedPreset = null;
+                if (selectedPresetId) {
+                    await window.api.settingsView.setSelectedPresetId(null);
+                }
             }
             
             // Load LocalAI status asynchronously to improve initial load time
@@ -974,11 +1030,23 @@ export class SettingsView extends LitElement {
             try {
                 const presets = await window.api.settingsView.getPresets();
                 this.presets = presets || [];
-                
-                // 현재 선택된 프리셋이 삭제되었는지 확인 (사용자 프리셋만 고려)
+
                 const userPresets = this.presets.filter(p => p.is_default === 0);
-                if (this.selectedPreset && !userPresets.find(p => p.id === this.selectedPreset.id)) {
-                    this.selectedPreset = userPresets.length > 0 ? userPresets[0] : null;
+                const selectedPresetId = await window.api.settingsView.getSelectedPresetId();
+
+                if (userPresets.length === 0) {
+                    this.selectedPreset = null;
+                    if (selectedPresetId) {
+                        await window.api.settingsView.setSelectedPresetId(null);
+                    }
+                } else {
+                    const selected = selectedPresetId
+                        ? userPresets.find(p => p.id === selectedPresetId)
+                        : null;
+                    this.selectedPreset = selected || userPresets[0];
+                    if (this.selectedPreset?.id !== selectedPresetId) {
+                        await window.api.settingsView.setSelectedPresetId(this.selectedPreset.id);
+                    }
                 }
                 
                 this.requestUpdate();
@@ -1059,9 +1127,11 @@ export class SettingsView extends LitElement {
     getMainShortcuts() {
         return [
             { name: 'Show / Hide', accelerator: this.shortcuts.toggleVisibility },
+            { name: 'Listen', accelerator: this.shortcuts.toggleListen },
             { name: 'Ask Anything', accelerator: this.shortcuts.nextStep },
-            { name: 'Scroll Up Response', accelerator: this.shortcuts.scrollUp },
-            { name: 'Scroll Down Response', accelerator: this.shortcuts.scrollDown },
+            { name: 'Settings', accelerator: this.shortcuts.toggleSettings },
+            { name: 'Scroll Up', accelerator: this.shortcuts.scrollUp },
+            { name: 'Scroll Down', accelerator: this.shortcuts.scrollDown },
         ];
     }
 
@@ -1090,8 +1160,11 @@ export class SettingsView extends LitElement {
 
     async handlePresetSelect(preset) {
         this.selectedPreset = preset;
-        // Here you could implement preset application logic
-        console.log('Selected preset:', preset);
+        try {
+            await window.api.settingsView.setSelectedPresetId(preset?.id || null);
+        } catch (error) {
+            console.error('[SettingsView] Failed to persist selected preset:', error);
+        }
     }
 
     handleMoveLeft() {
@@ -1343,6 +1416,21 @@ export class SettingsView extends LitElement {
                             })}
                         </div>
                     ` : ''}
+                </div>
+                <div class="model-select-group">
+                    <label for="reasoning-effort">Reasoning Effort</label>
+                    <select
+                        id="reasoning-effort"
+                        class="settings-select"
+                        .value=${this.reasoningEffort || 'medium'}
+                        @change=${this.handleReasoningEffortChange}
+                    >
+                        <option value="none">None</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="xhigh">XHigh</option>
+                    </select>
                 </div>
             </div>
         `;

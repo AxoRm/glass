@@ -36,13 +36,16 @@ class GeminiProvider {
  */
 async function createSTT({ apiKey, language = "en-US", callbacks = {}, ...config }) {
   const liveClient = new GoogleGenAI({ vertexai: false, apiKey })
+  const sttModel = typeof config.model === 'string' && config.model.trim()
+    ? config.model.trim()
+    : 'gemini-live-2.5-flash-preview';
 
   // Language code BCP-47 conversion
   const lang = language.includes("-") ? language : `${language}-US`
 
   const session = await liveClient.live.connect({
 
-    model: 'gemini-live-2.5-flash-preview',
+    model: sttModel,
     callbacks: {
       ...callbacks,
       onMessage: (msg) => {

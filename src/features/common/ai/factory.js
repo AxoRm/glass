@@ -22,9 +22,14 @@ const PROVIDERS = {
       name: 'OpenAI',
       handler: () => require("./providers/openai"),
       llmModels: [
+          { id: 'gpt-5.2', name: 'GPT-5.2' },
+          { id: 'gpt-5', name: 'GPT-5' },
+          { id: 'gpt-5-mini', name: 'GPT-5 Mini' },
           { id: 'gpt-4.1', name: 'GPT-4.1' },
+          { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' },
       ],
       sttModels: [
+          { id: 'gpt-4o-transcribe', name: 'GPT-4o Transcribe' },
           { id: 'gpt-4o-mini-transcribe', name: 'GPT-4o Mini Transcribe' }
       ],
   },
@@ -33,9 +38,14 @@ const PROVIDERS = {
       name: 'OpenAI (Glass)',
       handler: () => require("./providers/openai"),
       llmModels: [
+          { id: 'gpt-5.2-glass', name: 'GPT-5.2 (glass)' },
+          { id: 'gpt-5-glass', name: 'GPT-5 (glass)' },
+          { id: 'gpt-5-mini-glass', name: 'GPT-5 Mini (glass)' },
           { id: 'gpt-4.1-glass', name: 'GPT-4.1 (glass)' },
+          { id: 'gpt-4.1-mini-glass', name: 'GPT-4.1 Mini (glass)' },
       ],
       sttModels: [
+          { id: 'gpt-4o-transcribe-glass', name: 'GPT-4o Transcribe (glass)' },
           { id: 'gpt-4o-mini-transcribe-glass', name: 'GPT-4o Mini Transcribe (glass)' }
       ],
   },
@@ -43,9 +53,11 @@ const PROVIDERS = {
       name: 'Gemini',
       handler: () => require("./providers/gemini"),
       llmModels: [
+          { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
           { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
       ],
       sttModels: [
+          { id: 'gemini-live-2.5-flash', name: 'Gemini Live 2.5 Flash' },
           { id: 'gemini-live-2.5-flash-preview', name: 'Gemini Live 2.5 Flash' }
       ],
   },
@@ -53,6 +65,8 @@ const PROVIDERS = {
       name: 'Anthropic',
       handler: () => require("./providers/anthropic"),
       llmModels: [
+          { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
+          { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet' },
           { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
       ],
       sttModels: [],
@@ -63,6 +77,7 @@ const PROVIDERS = {
     llmModels: [],
     sttModels: [
         { id: 'nova-3', name: 'Nova-3 (General)' },
+        { id: 'nova-2', name: 'Nova-2' },
         ],
     },
   'ollama': {

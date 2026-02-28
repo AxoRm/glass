@@ -164,10 +164,10 @@ contextBridge.exposeInMainWorld('api', {
     onShowTextInput: (callback) => ipcRenderer.on('ask:showTextInput', callback),
     removeOnShowTextInput: (callback) => ipcRenderer.removeListener('ask:showTextInput', callback),
     
-    onScrollResponseUp: (callback) => ipcRenderer.on('aks:scrollResponseUp', callback),
-    removeOnScrollResponseUp: (callback) => ipcRenderer.removeListener('aks:scrollResponseUp', callback),
-    onScrollResponseDown: (callback) => ipcRenderer.on('aks:scrollResponseDown', callback),
-    removeOnScrollResponseDown: (callback) => ipcRenderer.removeListener('aks:scrollResponseDown', callback)
+    onScrollResponseUp: (callback) => ipcRenderer.on('scroll-response-up', callback),
+    removeOnScrollResponseUp: (callback) => ipcRenderer.removeListener('scroll-response-up', callback),
+    onScrollResponseDown: (callback) => ipcRenderer.on('scroll-response-down', callback),
+    removeOnScrollResponseDown: (callback) => ipcRenderer.removeListener('scroll-response-down', callback)
   },
 
   // src/ui/listen/ListenView.js
@@ -228,8 +228,12 @@ contextBridge.exposeInMainWorld('api', {
     
     // Settings Management
     getPresets: () => ipcRenderer.invoke('settings:getPresets'),
+    getSelectedPresetId: () => ipcRenderer.invoke('settings:get-selected-preset-id'),
+    setSelectedPresetId: (presetId) => ipcRenderer.invoke('settings:set-selected-preset-id', presetId),
     getAutoUpdate: () => ipcRenderer.invoke('settings:get-auto-update'),
     setAutoUpdate: (isEnabled) => ipcRenderer.invoke('settings:set-auto-update', isEnabled),
+    getReasoningEffort: () => ipcRenderer.invoke('settings:get-reasoning-effort'),
+    setReasoningEffort: (value) => ipcRenderer.invoke('settings:set-reasoning-effort', value),
     getContentProtectionStatus: () => ipcRenderer.invoke('get-content-protection-status'),
     toggleContentProtection: () => ipcRenderer.invoke('toggle-content-protection'),
     getCurrentShortcuts: () => ipcRenderer.invoke('settings:getCurrentShortcuts'),

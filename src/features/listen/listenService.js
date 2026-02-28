@@ -5,6 +5,7 @@ const authService = require('../common/services/authService');
 const sessionRepository = require('../common/repositories/session');
 const sttRepository = require('./stt/repositories');
 const internalBridge = require('../../bridge/internalBridge');
+const askService = require('../ask/askService');
 
 class ListenService {
     constructor() {
@@ -98,6 +99,10 @@ class ListenService {
 
     async handleTranscriptionComplete(speaker, text) {
         console.log(`[ListenService] Transcription complete: ${speaker} - ${text}`);
+
+        if (speaker === 'Me') {
+            askService.setVoiceDraft(speaker, text);
+        }
         
         // Save to database
         await this.saveConversationTurn(speaker, text);

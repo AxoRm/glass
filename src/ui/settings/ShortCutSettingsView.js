@@ -2,11 +2,14 @@ import { html, css, LitElement } from '../../ui/assets/lit-core-2.7.4.min.js';
 
 const commonSystemShortcuts = new Set([
     'Cmd+Q', 'Cmd+W', 'Cmd+A', 'Cmd+S', 'Cmd+Z', 'Cmd+X', 'Cmd+C', 'Cmd+V', 'Cmd+P', 'Cmd+F', 'Cmd+G', 'Cmd+H', 'Cmd+M', 'Cmd+N', 'Cmd+O', 'Cmd+T',
-    'Ctrl+Q', 'Ctrl+W', 'Ctrl+A', 'Ctrl+S', 'Ctrl+Z', 'Ctrl+X', 'Ctrl+C', 'Ctrl+V', 'Ctrl+P', 'Ctrl+F', 'Ctrl+G', 'Ctrl+H', 'Ctrl+M', 'Ctrl+N', 'Ctrl+O', 'Ctrl+T'
+    'Ctrl+Q', 'Ctrl+W', 'Ctrl+A', 'Ctrl+S', 'Ctrl+Z', 'Ctrl+X', 'Ctrl+C', 'Ctrl+V', 'Ctrl+P', 'Ctrl+F', 'Ctrl+G', 'Ctrl+H', 'Ctrl+M', 'Ctrl+N', 'Ctrl+O', 'Ctrl+T',
+    'Alt+Tab', 'Alt+F4', 'Alt+Space', 'Ctrl+Alt+Delete', 'Ctrl+Alt+Del', 'Ctrl+Shift+Escape', 'Ctrl+Shift+Esc'
 ]);
 
 const displayNameMap = {
     nextStep: 'Ask Anything',
+    toggleListen: 'Listen Start/Stop',
+    toggleSettings: 'Toggle Settings',
     moveUp: 'Move Up Window',
     moveDown: 'Move Down Window',
     scrollUp: 'Scroll Up Response',
@@ -132,6 +135,12 @@ export class ShortcutSettingsView extends LitElement {
           return;
         }
         // 성공
+        const conflictEntry = Object.entries(this.shortcuts).find(([key, value]) => key !== shortcutKey && value === accel);
+        if (conflictEntry) {
+          this.feedback = {...this.feedback, [shortcutKey]:{type:'error',msg:`Already used by ${this.formatShortcutName(conflictEntry[0])}`}};
+          return;
+        }
+
         this.shortcuts = {...this.shortcuts, [shortcutKey]:accel};
         this.feedback = {...this.feedback, [shortcutKey]:{type:'success',msg:'Shortcut set'}};
         this.stopCapture();

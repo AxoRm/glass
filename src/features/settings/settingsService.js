@@ -167,54 +167,68 @@ const windowNotificationManager = new WindowNotificationManager();
 // Default keybinds configuration
 const DEFAULT_KEYBINDS = {
     mac: {
-        moveUp: 'Cmd+Up',
-        moveDown: 'Cmd+Down',
-        moveLeft: 'Cmd+Left',
-        moveRight: 'Cmd+Right',
-        toggleVisibility: 'Cmd+\\',
-        toggleClickThrough: 'Cmd+M',
-        nextStep: 'Cmd+Enter',
-        manualScreenshot: 'Cmd+Shift+S',
-        previousResponse: 'Cmd+[',
-        nextResponse: 'Cmd+]',
-        scrollUp: 'Cmd+Shift+Up',
-        scrollDown: 'Cmd+Shift+Down',
+        moveUp: 'Cmd+Alt+Up',
+        moveDown: 'Cmd+Alt+Down',
+        moveLeft: 'Cmd+Alt+Left',
+        moveRight: 'Cmd+Alt+Right',
+        toggleVisibility: 'Cmd+Alt+H',
+        toggleClickThrough: 'Cmd+Alt+C',
+        nextStep: 'Cmd+Alt+A',
+        toggleListen: 'Cmd+Alt+L',
+        toggleSettings: 'Cmd+Alt+S',
+        manualScreenshot: 'Cmd+Alt+X',
+        previousResponse: 'Cmd+Alt+[',
+        nextResponse: 'Cmd+Alt+]',
+        scrollUp: 'Cmd+Alt+K',
+        scrollDown: 'Cmd+Alt+J',
     },
     windows: {
-        moveUp: 'Ctrl+Up',
-        moveDown: 'Ctrl+Down',
-        moveLeft: 'Ctrl+Left',
-        moveRight: 'Ctrl+Right',
-        toggleVisibility: 'Ctrl+\\',
-        toggleClickThrough: 'Ctrl+M',
-        nextStep: 'Ctrl+Enter',
-        manualScreenshot: 'Ctrl+Shift+S',
-        previousResponse: 'Ctrl+[',
-        nextResponse: 'Ctrl+]',
-        scrollUp: 'Ctrl+Shift+Up',
-        scrollDown: 'Ctrl+Shift+Down',
+        moveUp: 'Ctrl+Alt+Up',
+        moveDown: 'Ctrl+Alt+Down',
+        moveLeft: 'Ctrl+Alt+Left',
+        moveRight: 'Ctrl+Alt+Right',
+        toggleVisibility: 'Ctrl+Alt+H',
+        toggleClickThrough: 'Ctrl+Alt+C',
+        nextStep: 'Ctrl+Alt+A',
+        toggleListen: 'Ctrl+Alt+L',
+        toggleSettings: 'Ctrl+Alt+S',
+        manualScreenshot: 'Ctrl+Alt+X',
+        previousResponse: 'Ctrl+Alt+[',
+        nextResponse: 'Ctrl+Alt+]',
+        scrollUp: 'Ctrl+Alt+K',
+        scrollDown: 'Ctrl+Alt+J',
     }
 };
 
 // Service state
 let currentSettings = null;
+const REASONING_EFFORT_VALUES = ['none', 'low', 'medium', 'high', 'xhigh'];
+
+function normalizeReasoningEffort(value) {
+    const candidate = (typeof value === 'string' ? value.trim().toLowerCase() : '');
+    if (candidate === 'minimal') return 'none';
+    if (candidate === 'x-high' || candidate === 'x_high' || candidate === 'x high') return 'xhigh';
+    return REASONING_EFFORT_VALUES.includes(candidate) ? candidate : 'medium';
+}
 
 function getDefaultSettings() {
     const isMac = process.platform === 'darwin';
     return {
         profile: 'school',
+        selectedPresetId: null,
         language: 'en',
         screenshotInterval: '5000',
         imageQuality: '0.8',
         layoutMode: 'stacked',
         keybinds: isMac ? DEFAULT_KEYBINDS.mac : DEFAULT_KEYBINDS.windows,
         throttleTokens: 500,
-        maxTokens: 2000,
+        maxTokens: 4096,
         throttlePercent: 80,
         googleSearchEnabled: false,
         backgroundTransparency: 0.5,
         fontSize: 14,
-        contentProtection: true
+        contentProtection: true,
+        reasoningEffort: 'medium'
     };
 }
 
@@ -263,6 +277,39 @@ async function getPresets() {
     } catch (error) {
         console.error('[SettingsService] Error getting presets:', error);
         return [];
+    }
+}
+
+async function getSelectedPresetId() {
+    try {
+        const settings = await getSettings();
+        return settings?.selectedPresetId || null;
+    } catch (error) {
+        console.error('[SettingsService] Error getting selected preset id:', error);
+        return null;
+    }
+}
+
+async function setSelectedPresetId(presetId) {
+    try {
+        return await saveSettings({ selectedPresetId: presetId || null });
+    } catch (error) {
+        console.error('[SettingsService] Error setting selected preset id:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+async function getSelectedPresetPrompt() {
+    try {
+        const selectedPresetId = await getSelectedPresetId();
+        if (!selectedPresetId) return '';
+
+        const presets = await getPresets();
+        const selectedPreset = presets.find((preset) => preset.id === selectedPresetId);
+        return selectedPreset?.prompt || '';
+    } catch (error) {
+        console.error('[SettingsService] Error getting selected preset prompt:', error);
+        return '';
     }
 }
 
@@ -420,6 +467,26 @@ async function setAutoUpdateSetting(isEnabled) {
     }
 }
 
+async function getReasoningEffort() {
+    try {
+        const settings = await getSettings();
+        return normalizeReasoningEffort(settings?.reasoningEffort);
+    } catch (error) {
+        console.error('[SettingsService] Error getting reasoning effort:', error);
+        return 'medium';
+    }
+}
+
+async function setReasoningEffort(value) {
+    try {
+        const reasoningEffort = normalizeReasoningEffort(value);
+        return await saveSettings({ reasoningEffort });
+    } catch (error) {
+        console.error('[SettingsService] Error setting reasoning effort:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 function initialize() {
     // cleanup 
     windowNotificationManager.cleanup();
@@ -456,10 +523,15 @@ module.exports = {
     updateContentProtection,
     getAutoUpdateSetting,
     setAutoUpdateSetting,
+    getReasoningEffort,
+    setReasoningEffort,
     // Model settings facade
     getModelSettings,
     clearApiKey,
     setSelectedModel,
+    getSelectedPresetId,
+    setSelectedPresetId,
+    getSelectedPresetPrompt,
     // Ollama facade
     getOllamaStatus,
     ensureOllamaReady,

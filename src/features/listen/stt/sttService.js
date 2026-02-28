@@ -64,9 +64,11 @@ class SttService {
 
     async handleSendSystemAudioContent(data, mimeType) {
         try {
-            await this.sendSystemAudioContent(data, mimeType);
-            this.sendToRenderer('system-audio-data', { data });
-            return { success: true };
+            const result = await this.sendSystemAudioContent(data, mimeType);
+            if (result?.success) {
+                this.sendToRenderer('system-audio-data', { data });
+            }
+            return result || { success: true };
         } catch (error) {
             console.error('Error sending system audio:', error);
             return { success: false, error: error.message };
@@ -456,6 +458,7 @@ class SttService {
         
         const sttOptions = {
             apiKey: this.modelInfo.apiKey,
+            model: this.modelInfo.model,
             language: effectiveLanguage,
             usePortkey: this.modelInfo.provider === 'openai-glass',
             portkeyVirtualKey: this.modelInfo.provider === 'openai-glass' ? this.modelInfo.apiKey : undefined,
@@ -548,7 +551,7 @@ class SttService {
         // const isGemini = provider === 'gemini';
         
         if (!this.mySttSession) {
-            throw new Error('User STT session not active');
+            return { success: false, error: 'session_inactive' };
         }
 
         let modelInfo = this.modelInfo;
@@ -569,11 +572,12 @@ class SttService {
             payload = data;
         }
         await this.mySttSession.sendRealtimeInput(payload);
+        return { success: true };
     }
 
     async sendSystemAudioContent(data, mimeType) {
         if (!this.theirSttSession) {
-            throw new Error('Their STT session not active');
+            return { success: false, error: 'session_inactive' };
         }
 
         let modelInfo = this.modelInfo;
@@ -595,6 +599,7 @@ class SttService {
         }
 
         await this.theirSttSession.sendRealtimeInput(payload);
+        return { success: true };
     }
 
     killExistingSystemAudioDump() {

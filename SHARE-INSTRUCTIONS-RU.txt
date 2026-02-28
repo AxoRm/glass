@@ -1,0 +1,16 @@
+Glass (Windows) - инструкция для запуска
+
+1) Установить:
+- Node.js 20.x
+- Python 3
+- Build Tools for Visual Studio (C++ workload)
+
+2) Открыть папку проекта в PowerShell/CMD и выполнить:
+npm run setup
+
+3) Запуск программы:
+- обычный: npm start
+- скрытый старт без консоли: двойной клик по Start-Glass-Hidden.vbs
+
+Полезно:
+- Ctrl+M переключает click-through режим (сквозь окно/обратно).

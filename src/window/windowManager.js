@@ -33,6 +33,7 @@ let lastVisibleWindows = new Set(['header']);
 
 let currentHeaderState = 'apikey';
 const windowPool = new Map();
+const shouldOpenDevTools = () => !app.isPackaged && process.env.GLASS_DEVTOOLS === '1';
 
 let settingsHideTimer = null;
 
@@ -277,15 +278,13 @@ async function handleWindowVisibilityRequest(windowPool, layoutManager, movement
     const disableClicks = (selectedWindow) => {
         for (const [name, win] of windowPool) {
             if (win !== selectedWindow && !win.isDestroyed()) {
-                win.setIgnoreMouseEvents(true, { forward: true });
+                win.setIgnoreMouseEvents(true);
             }
         }
     };
 
     const restoreClicks = () => {
-        for (const [, win] of windowPool) {
-            if (!win.isDestroyed()) win.setIgnoreMouseEvents(false);
-        }
+        shortcutsService.applyClickThroughStateToAllWindows();
     };
 
     if (name === 'settings') {
@@ -337,6 +336,7 @@ async function handleWindowVisibilityRequest(windowPool, layoutManager, movement
             }
             // globalShortcut.unregisterAll();
             disableClicks(win);
+            win.setIgnoreMouseEvents(false);
             win.show();
         } else {
             if (process.platform === 'darwin') {
@@ -482,10 +482,11 @@ function createFeatureWindows(header, namesToCreate) {
                         }
                     });
                 }
-                if (!app.isPackaged) {
+                if (shouldOpenDevTools()) {
                     listen.webContents.openDevTools({ mode: 'detach' });
                 }
                 windowPool.set('listen', listen);
+                shortcutsService.applyClickThroughStateToWindow(listen);
                 break;
             }
 
@@ -515,16 +516,17 @@ function createFeatureWindows(header, namesToCreate) {
                 }
                 
                 // Open DevTools in development
-                if (!app.isPackaged) {
+                if (shouldOpenDevTools()) {
                     ask.webContents.openDevTools({ mode: 'detach' });
                 }
                 windowPool.set('ask', ask);
+                shortcutsService.applyClickThroughStateToWindow(ask);
                 break;
             }
 
             // settings
             case 'settings': {
-                const settings = new BrowserWindow({ ...commonChildOptions, width:240, maxHeight:400, parent:undefined });
+                const settings = new BrowserWindow({ ...commonChildOptions, width:380, maxHeight:400, parent:undefined });
                 settings.setContentProtection(isContentProtectionOn);
                 settings.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});
                 if (process.platform === 'darwin') {
@@ -549,8 +551,9 @@ function createFeatureWindows(header, namesToCreate) {
                     });
                 }
                 windowPool.set('settings', settings);  
+                shortcutsService.applyClickThroughStateToWindow(settings);
 
-                if (!app.isPackaged) {
+                if (shouldOpenDevTools()) {
                     settings.webContents.openDevTools({ mode: 'detach' });
                 }
                 break;
@@ -588,7 +591,8 @@ function createFeatureWindows(header, namesToCreate) {
                 }
 
                 windowPool.set('shortcut-settings', shortcutEditor);
-                if (!app.isPackaged) {
+                shortcutsService.applyClickThroughStateToWindow(shortcutEditor);
+                if (shouldOpenDevTools()) {
                     shortcutEditor.webContents.openDevTools({ mode: 'detach' });
                 }
                 break;
@@ -639,7 +643,7 @@ function getCurrentDisplay(window) {
 
 function createWindows() {
     const HEADER_HEIGHT        = 47;
-    const DEFAULT_WINDOW_WIDTH = 353;
+    const DEFAULT_WINDOW_WIDTH = 460;
 
     const primaryDisplay = screen.getPrimaryDisplay();
     const { y: workAreaY, width: screenWidth } = primaryDisplay.workArea;
@@ -696,6 +700,7 @@ function createWindows() {
         });
     }
     windowPool.set('header', header);
+    shortcutsService.applyClickThroughStateToWindow(header);
     layoutManager = new WindowLayoutManager(windowPool);
     movementManager = new SmoothMovementManager(windowPool);
 
@@ -723,7 +728,7 @@ function createWindows() {
     header.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     
     // Open DevTools in development
-    if (!app.isPackaged) {
+    if (shouldOpenDevTools()) {
         header.webContents.openDevTools({ mode: 'detach' });
     }
 
@@ -740,6 +745,24 @@ function createWindows() {
             const target = input.target;
             if (target && (target.includes('input') || target.includes('apikey'))) {
                 header.focus();
+            }
+        }
+
+        if (input.type === 'keyDown') {
+            const target = String(input.target || '').toLowerCase();
+            const isTypingTarget = target.includes('input') || target.includes('textarea') || target.includes('contenteditable');
+            if (isTypingTarget) return;
+
+            const isModifierPressed = process.platform === 'darwin' ? input.meta : input.control;
+            const key = String(input.key || '').toLowerCase();
+            const code = String(input.code || '').toLowerCase();
+            const isBackslashKey = key === '\\' || key === 'backslash' || code === 'backslash';
+
+            if (isModifierPressed && !input.shift && !input.alt && isBackslashKey) {
+                event.preventDefault();
+                shortcutsService.toggleAllWindowsVisibility().catch((error) => {
+                    console.error('[WindowManager] Ctrl/Cmd+\\ fallback toggle failed:', error?.message || error);
+                });
             }
         }
     });

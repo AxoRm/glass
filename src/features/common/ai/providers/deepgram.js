@@ -41,9 +41,10 @@ function createSTT({
     language = 'en-US',
     sampleRate = 24000,
     callbacks = {},
+    model = 'nova-3',
   }) {
     const qs = new URLSearchParams({
-      model: 'nova-3',
+      model,
       encoding: 'linear16',
       sample_rate: sampleRate.toString(),
       language,
